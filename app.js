@@ -589,8 +589,9 @@ function beginTrace(event, explicitIndex = null) {
   if (!canPlayNow()) return;
   const index = explicitIndex ?? pointerIndex(event);
   if (!Number.isInteger(index)) return;
-  state.dragging = true;
   clearSelection();
+  state.dragging = true;
+  
   addTile(index);
   if (event.pointerId !== undefined) els.boardWrap.setPointerCapture?.(event.pointerId);
   event.preventDefault();

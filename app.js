@@ -1430,12 +1430,19 @@ function renderBoard(board) {
 // - Pen/stylus input
 // ============================================================
 
-function pointerIndex(event) {
-  const x =
-    event.clientX;
+// How much of each tile edge should be ignored while dragging.
+// 0.15 = ignore the outer 15% on every side.
+//
+// Try:
+// 0.10 = fairly forgiving
+// 0.15 = recommended
+// 0.20 = more precise
+// 0.25 = very strict
+const TILE_HITBOX_INSET = 0.15;
 
-  const y =
-    event.clientY;
+function pointerIndex(event) {
+  const x = event.clientX;
+  const y = event.clientY;
 
   if (
     !Number.isFinite(x) ||
@@ -1444,31 +1451,34 @@ function pointerIndex(event) {
     return null;
   }
 
-  const tiles =
-    [
-      ...els.board
-        .querySelectorAll(".tile")
-    ];
+  const tiles = [
+    ...els.board.querySelectorAll(".tile")
+  ];
 
   for (const tile of tiles) {
-    const rect =
-      tile.getBoundingClientRect();
+    const rect = tile.getBoundingClientRect();
+
+    // Shrink the effective hitbox inward.
+    const insetX = rect.width * TILE_HITBOX_INSET;
+    const insetY = rect.height * TILE_HITBOX_INSET;
+
+    const left = rect.left + insetX;
+    const right = rect.right - insetX;
+    const top = rect.top + insetY;
+    const bottom = rect.bottom - insetY;
 
     if (
-      x >= rect.left &&
-      x <= rect.right &&
-      y >= rect.top &&
-      y <= rect.bottom
+      x >= left &&
+      x <= right &&
+      y >= top &&
+      y <= bottom
     ) {
-      return Number(
-        tile.dataset.index
-      );
+      return Number(tile.dataset.index);
     }
   }
 
   return null;
 }
-
 function beginTrace(
   event,
   explicitIndex = null

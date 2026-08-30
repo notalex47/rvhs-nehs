@@ -1614,7 +1614,7 @@ function renderBoard(board) {
 // 0.15 = recommended
 // 0.20 = more precise
 // 0.25 = very strict
-const TILE_HITBOX_INSET = 0.22;
+const TILE_HITBOX_INSET = 0.19;
 
 function pointerIndex(event) {
   const x = event.clientX;

@@ -1,0 +1,13 @@
+WordGrid Live - complete package
+
+Integrated changes:
+- Cross-browser pointer dragging for Firefox/macOS, Chrome/Chromebook, touch, and pen.
+- Current swipe hitbox inset preserved at 0.22 (inner 56% x 56% of each tile during a swipe; the full tile still starts a word).
+- New post-round "Reveal all possible words" feature.
+- Possible words are calculated locally from the bundled YAWL dictionary and the exact board adjacency/no-tile-reuse rules.
+- Words found by the current player are highlighted in the reveal list.
+- Reveal shows total possible words, found count, and maximum possible score.
+- No Firebase rule changes are required for this feature.
+
+Deployment:
+Upload the contents of this folder to the root of the GitHub Pages repository, replacing the existing files with the same names. Keep wordlist.txt beside index.html.

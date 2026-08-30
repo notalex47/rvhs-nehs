@@ -1,5 +1,5 @@
 import { firebaseConfig } from "./firebase-config.js";
-import { generateBoard, scoreWord, areAdjacent, makeRoomCode, sanitizeRoomCode } from "./game-core.js";
+import { generateBoard, scoreWord, areAdjacent, canTraceWord, makeRoomCode, sanitizeRoomCode } from "./game-core.js";
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -16,7 +16,10 @@ const els = {
   wordHint: $("wordHint"), myScore: $("myScore"), lastWord: $("lastWord"), leaderboard: $("leaderboard"),
   leaderboardEyebrow: $("leaderboardEyebrow"), leaderboardTitle: $("leaderboardTitle"),
   playerCount: $("playerCount"), wordLog: $("wordLog"), resultsPanel: $("resultsPanel"),
-  winnerHeading: $("winnerHeading"), resultsList: $("resultsList"), rematchButton: $("rematchButton"),
+  winnerHeading: $("winnerHeading"), resultsList: $("resultsList"),
+  revealWordsButton: $("revealWordsButton"), possibleWordsPanel: $("possibleWordsPanel"),
+  possibleWordsMeta: $("possibleWordsMeta"), possibleWordsList: $("possibleWordsList"),
+  rematchButton: $("rematchButton"),
   leaveRoomButton: $("leaveRoomButton"), toast: $("toast"), homeButton: $("homeButton"),
   helpButton: $("helpButton"), helpDialog: $("helpDialog"), closeHelpButton: $("closeHelpButton")
 };
@@ -40,6 +43,9 @@ const state = {
   roundId: null,
   localWords: [],
   localAccepted: new Set(),
+  possibleWords: null,
+  possibleWordsRoundId: null,
+  possibleWordsLoading: false,
   finishRequested: false,
   tickHandle: null,
   presenceRef: null
@@ -1015,6 +1021,8 @@ function renderRoom() {
     state.finishRequested =
       false;
 
+    resetPossibleWords();
+
     els.wordLog.innerHTML =
       "";
 
@@ -1184,6 +1192,174 @@ function renderResults(players) {
         </div>
       `
     ).join("");
+}
+
+
+// ============================================================
+// POST-ROUND WORD REVEAL
+// ============================================================
+
+function resetPossibleWords() {
+  state.possibleWords = null;
+  state.possibleWordsRoundId = null;
+  state.possibleWordsLoading = false;
+
+  if (!els.possibleWordsPanel) return;
+
+  els.possibleWordsPanel.classList.add("hidden");
+  els.possibleWordsMeta.textContent = "";
+  els.possibleWordsList.innerHTML = "";
+  els.revealWordsButton.disabled = false;
+  els.revealWordsButton.textContent = "Reveal all possible words";
+}
+
+function wordFitsBoardLetters(word, boardCounts) {
+  const needed = {};
+
+  for (const letter of word.toUpperCase()) {
+    needed[letter] = (needed[letter] || 0) + 1;
+    if (needed[letter] > (boardCounts[letter] || 0)) return false;
+  }
+
+  return true;
+}
+
+async function calculatePossibleWords(board, roundId) {
+  const boardCounts = {};
+  for (const letter of board) {
+    boardCounts[letter] = (boardCounts[letter] || 0) + 1;
+  }
+
+  const dictionaryWords = [...state.dictionary];
+  const possible = [];
+  const BATCH_SIZE = 2000;
+
+  for (let i = 0; i < dictionaryWords.length; i++) {
+    // Abort if the player leaves or a new board begins mid-search.
+    if (!state.room || state.room.gameId !== roundId) return null;
+
+    const word = dictionaryWords[i];
+
+    // Cheap letter-count filtering prevents most words from reaching
+    // the more expensive adjacency/path check.
+    if (
+      wordFitsBoardLetters(word, boardCounts) &&
+      canTraceWord(board, word)
+    ) {
+      possible.push(word);
+    }
+
+    // Yield to the browser regularly so slower Chromebooks/phones stay responsive.
+    if (i > 0 && i % BATCH_SIZE === 0) {
+      const percent = Math.round((i / dictionaryWords.length) * 100);
+      els.possibleWordsMeta.textContent = `Checking dictionary… ${percent}%`;
+      await new Promise(resolve => requestAnimationFrame(resolve));
+    }
+  }
+
+  // Show the hardest/longest words first, alphabetically within a length.
+  possible.sort((a, b) => b.length - a.length || a.localeCompare(b));
+  return possible;
+}
+
+function renderPossibleWords(words) {
+  const myWords = new Set(
+    state.localWords.map(item => String(item.word).toLowerCase())
+  );
+
+  const foundCount = words.filter(word => myWords.has(word)).length;
+  const maximumScore = words.reduce((sum, word) => sum + scoreWord(word), 0);
+
+  els.possibleWordsMeta.innerHTML = `
+    <strong>${words.length.toLocaleString()}</strong> possible words
+    · <strong>${foundCount.toLocaleString()}</strong> found by you
+    · <strong>${maximumScore.toLocaleString()}</strong> total possible points
+  `;
+
+  const groups = new Map();
+  for (const word of words) {
+    if (!groups.has(word.length)) groups.set(word.length, []);
+    groups.get(word.length).push(word);
+  }
+
+  const lengths = [...groups.keys()].sort((a, b) => b - a);
+
+  if (!lengths.length) {
+    els.possibleWordsList.innerHTML = '<p class="possible-words-empty">No valid words were found for this board.</p>';
+    return;
+  }
+
+  els.possibleWordsList.innerHTML = lengths.map(length => {
+    const group = groups.get(length);
+    const wordsHtml = group.map(word => {
+      const found = myWords.has(word);
+      return `<span class="possible-word ${found ? "found" : ""}">${escapeHtml(word.toUpperCase())}</span>`;
+    }).join("");
+
+    return `
+      <section class="possible-word-group">
+        <div class="possible-word-heading">
+          <strong>${length}-letter words</strong>
+          <span>${group.length.toLocaleString()}</span>
+        </div>
+        <div class="possible-word-grid">${wordsHtml}</div>
+      </section>
+    `;
+  }).join("");
+}
+
+async function revealPossibleWords() {
+  if (
+    !state.room ||
+    state.room.status !== "finished" ||
+    state.room.board?.length !== 16 ||
+    !state.dictionaryReady
+  ) {
+    return;
+  }
+
+  // If this board was already calculated, the button becomes a simple toggle.
+  if (
+    state.possibleWords &&
+    state.possibleWordsRoundId === state.room.gameId
+  ) {
+    const currentlyHidden = els.possibleWordsPanel.classList.contains("hidden");
+    els.possibleWordsPanel.classList.toggle("hidden", !currentlyHidden);
+    els.revealWordsButton.textContent = currentlyHidden
+      ? "Hide possible words"
+      : `Show all ${state.possibleWords.length.toLocaleString()} possible words`;
+    return;
+  }
+
+  if (state.possibleWordsLoading) return;
+
+  state.possibleWordsLoading = true;
+  const roundId = state.room.gameId;
+  const board = [...state.room.board];
+
+  els.possibleWordsPanel.classList.remove("hidden");
+  els.possibleWordsMeta.textContent = "Checking dictionary… 0%";
+  els.possibleWordsList.innerHTML = "";
+  els.revealWordsButton.disabled = true;
+  els.revealWordsButton.textContent = "Finding every word…";
+
+  try {
+    const words = await calculatePossibleWords(board, roundId);
+
+    if (!words || !state.room || state.room.gameId !== roundId) return;
+
+    state.possibleWords = words;
+    state.possibleWordsRoundId = roundId;
+    renderPossibleWords(words);
+    els.revealWordsButton.textContent = "Hide possible words";
+  } catch (error) {
+    console.error(error);
+    els.possibleWordsMeta.textContent = "Could not calculate the possible words.";
+    els.revealWordsButton.textContent = "Try again";
+  } finally {
+    state.possibleWordsLoading = false;
+    els.revealWordsButton.disabled = false;
+  }
 }
 
 async function startRound() {
@@ -2400,6 +2576,12 @@ function wireEvents() {
     .addEventListener(
       "click",
       rematch
+    );
+
+  els.revealWordsButton
+    .addEventListener(
+      "click",
+      revealPossibleWords
     );
 
   els.copyRoomButton

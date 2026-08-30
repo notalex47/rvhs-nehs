@@ -1,13 +1,21 @@
-WordGrid Live - complete package
+WordGrid Live - alphanumeric room + inactivity cleanup package
 
 Integrated changes:
-- Cross-browser pointer dragging for Firefox/macOS, Chrome/Chromebook, touch, and pen.
-- Current swipe hitbox inset preserved at 0.22 (inner 56% x 56% of each tile during a swipe; the full tile still starts a word).
-- New post-round "Reveal all possible words" feature.
-- Possible words are calculated locally from the bundled YAWL dictionary and the exact board adjacency/no-tile-reuse rules.
-- Words found by the current player are highlighted in the reveal list.
-- Reveal shows total possible words, found count, and maximum possible score.
-- No Firebase rule changes are required for this feature.
+- Room codes are now one character from 0-9 or A-Z (36 simultaneous room slots).
+- Rooms become stale/reclaimable after 10 minutes without meaningful activity.
+- Starting, rematching, joins, and scoring activity observed by the host refresh the inactivity deadline.
+- Finished rooms remain reclaimable after 5 minutes.
+- Host pressing Leave deletes the room immediately.
+- Whenever someone creates or joins multiplayer, the app performs best-effort cleanup of stale Firebase room records, including expired legacy multi-digit rooms from older versions.
+- Cross-browser pointer dragging for Firefox/macOS, Chrome/Chromebook, touch, and pen is preserved.
+- Current swipe hitbox inset is preserved at 0.22.
+- Post-round Reveal all possible words remains included.
+
+IMPORTANT FIREBASE STEP:
+The new database.rules.json MUST be copied into Firebase Console -> Realtime Database -> Rules and Published. The old numeric-only rules will reject A-Z room codes and will not authorize stale-room cleanup.
+
+Cleanup behavior:
+The 10-minute expiration is enforced by timestamps, so a stale room is immediately considered unavailable/reclaimable after that point. Because this is a static GitHub Pages app with no scheduled backend, physical deletion happens opportunistically the next time an authenticated multiplayer client runs cleanup. This avoids requiring paid Cloud Functions or scheduled jobs.
 
 Deployment:
-Upload the contents of this folder to the root of the GitHub Pages repository, replacing the existing files with the same names. Keep wordlist.txt beside index.html.
+Upload the contents of this folder to the root of the GitHub Pages repository, replacing existing files with the same names. Keep wordlist.txt beside index.html, then publish database.rules.json in Firebase Console.

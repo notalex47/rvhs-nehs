@@ -143,9 +143,14 @@ export function scoreWord(word) {
 }
 
 export function sanitizeRoomCode(value) {
-  return String(value || "").replace(/\D/g, "").slice(0, 1);
+  return String(value || "")
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, "")
+    .slice(0, 1);
 }
 
 export function makeRoomCode(random = Math.random) {
-  return String(Math.min(9, Math.floor(random() * 10)));
+  const codes = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const index = Math.min(codes.length - 1, Math.floor(random() * codes.length));
+  return codes[index];
 }

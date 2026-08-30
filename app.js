@@ -48,7 +48,9 @@ const state = {
   possibleWordsLoading: false,
   finishRequested: false,
   tickHandle: null,
-  presenceRef: null
+  roomExpiryHandle: null,
+  presenceRef: null,
+  activityTouchPending: false
 };
 
 const YAWL_VERSION = "0.3.2.03";
@@ -59,8 +61,9 @@ const WORDLIST_SOURCES = [
   "https://raw.githubusercontent.com/elasticdog/yawl/master/yawl-0.3.2.03/word.list"
 ];
 
-const ROOM_CODES = "0123456789".split("");
-const ROOM_TTL_MS = 30 * 60 * 1000;
+const ROOM_CODES = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ".split("");
+const ROOM_INACTIVE_MS = 10 * 60 * 1000;
+const ROOM_ACTIVITY_TOUCH_MS = 30 * 1000;
 const FINISHED_ROOM_GRACE_MS = 5 * 60 * 1000;
 const PRACTICE_UID = "practice";
 
@@ -440,6 +443,14 @@ function roomCanBeClaimed(room, now) {
   }
 
   if (
+    room.status === "finished" &&
+    Number(room.finishedAt || 0) > 0 &&
+    Number(room.finishedAt) + FINISHED_ROOM_GRACE_MS <= now
+  ) {
+    return true;
+  }
+
+  if (
     Number(room.expiresAt || 0) > 0 &&
     Number(room.expiresAt) <= now
   ) {
@@ -447,15 +458,129 @@ function roomCanBeClaimed(room, now) {
   }
 
   if (
-    room.status === "finished" &&
-    Number(room.finishedAt || 0) > 0 &&
-    Number(room.finishedAt) +
-      FINISHED_ROOM_GRACE_MS <= now
+    Number(room.lastActivityAt || 0) > 0 &&
+    Number(room.lastActivityAt) + ROOM_INACTIVE_MS <= now
+  ) {
+    return true;
+  }
+
+  // Backward-compatible cleanup for rooms created by older versions.
+  if (
+    !room.lastActivityAt &&
+    !room.expiresAt &&
+    Number(room.createdAt || 0) > 0 &&
+    Number(room.createdAt) + ROOM_INACTIVE_MS <= now
   ) {
     return true;
   }
 
   return false;
+}
+
+async function cleanupStaleRooms() {
+  if (!state.firebase || !state.db || !state.user) return;
+
+  try {
+    const roomsSnap = await state.firebase.get(
+      state.firebase.ref(state.db, "rooms")
+    );
+
+    if (!roomsSnap.exists()) return;
+
+    const rooms = roomsSnap.val() || {};
+    const now = nowServer();
+    const staleCodes = Object.entries(rooms)
+      .filter(([, room]) => roomCanBeClaimed(room, now))
+      .map(([code]) => code);
+
+    await Promise.all(staleCodes.map(async code => {
+      try {
+        await state.firebase.runTransaction(
+          roomRef(code),
+          current => {
+            if (!current) return;
+            if (!roomCanBeClaimed(current, nowServer())) return;
+            return null;
+          },
+          { applyLocally: false }
+        );
+      } catch (error) {
+        console.warn(`Could not clean stale room ${code}:`, error);
+      }
+    }));
+  } catch (error) {
+    // Cleanup is best-effort. Room claiming still independently rejects
+    // active rooms and can overwrite stale one-character slots safely.
+    console.warn("Stale-room cleanup was skipped:", error);
+  }
+}
+
+async function touchRoomActivity({ force = false } = {}) {
+  if (
+    isPractice() ||
+    !state.room ||
+    !state.firebase ||
+    !state.db ||
+    state.room.hostUid !== state.user?.uid ||
+    state.room.status === "finished" ||
+    state.activityTouchPending
+  ) {
+    return;
+  }
+
+  const now = nowServer();
+  const lastActivityAt = Number(state.room.lastActivityAt || 0);
+
+  if (!force && now - lastActivityAt < ROOM_ACTIVITY_TOUCH_MS) {
+    return;
+  }
+
+  state.activityTouchPending = true;
+
+  try {
+    await state.firebase.update(roomRef(), {
+      lastActivityAt: now,
+      expiresAt: now + ROOM_INACTIVE_MS
+    });
+  } catch (error) {
+    console.warn("Could not refresh room activity:", error);
+  } finally {
+    state.activityTouchPending = false;
+  }
+}
+
+function startRoomExpiryWatcher() {
+  if (state.roomExpiryHandle) {
+    clearInterval(state.roomExpiryHandle);
+  }
+
+  state.roomExpiryHandle = setInterval(() => {
+    if (
+      state.mode !== "multiplayer" ||
+      !state.room ||
+      state.roomCode === null
+    ) {
+      return;
+    }
+
+    if (!roomCanBeClaimed(state.room, nowServer())) {
+      return;
+    }
+
+    const message = state.room.status === "finished"
+      ? "This finished room has been released."
+      : "This room expired after 10 minutes of inactivity.";
+
+    showToast(message);
+    leaveRoom().catch(error => console.warn("Could not leave expired room:", error));
+  }, 15000);
+}
+
+function stopRoomExpiryWatcher() {
+  if (state.roomExpiryHandle) {
+    clearInterval(state.roomExpiryHandle);
+  }
+  state.roomExpiryHandle = null;
 }
 
 function buildRoom(name, sessionId) {
@@ -466,8 +591,9 @@ function buildRoom(name, sessionId) {
     hostUid: state.user.uid,
     sessionId,
     createdAt: now,
+    lastActivityAt: now,
     expiresAt:
-      now + ROOM_TTL_MS,
+      now + ROOM_INACTIVE_MS,
     status: "lobby",
     gameId: 0,
 
@@ -504,6 +630,7 @@ async function createRoom() {
 
   try {
     await ensureFirebase();
+    await cleanupStaleRooms();
 
     const name =
       getPlayerName();
@@ -551,7 +678,7 @@ async function createRoom() {
 
     if (claimedCode === null) {
       throw new Error(
-        "All 10 rooms (0–9) are in use. Try again after a game ends."
+        "All 36 room codes (0–9, A–Z) are in use. Try again after a room becomes inactive."
       );
     }
 
@@ -587,7 +714,7 @@ async function joinRoom(
 
   if (code.length !== 1) {
     return showToast(
-      "Enter the 1-digit room code (0–9)."
+      "Enter the 1-character room code (0–9 or A–Z)."
     );
   }
 
@@ -596,6 +723,7 @@ async function joinRoom(
 
   try {
     await ensureFirebase();
+    await cleanupStaleRooms();
 
     const snap =
       await state.firebase.get(
@@ -718,6 +846,7 @@ async function enterRoom(
   );
 
   setScreen("room");
+  startRoomExpiryWatcher();
 
   state.presenceRef =
     state.firebase.ref(
@@ -774,6 +903,13 @@ async function enterRoom(
 
         state.room =
           incoming;
+
+        if (
+          incoming.hostUid === state.user?.uid &&
+          incoming.status !== "finished"
+        ) {
+          touchRoomActivity().catch(() => {});
+        }
 
         renderRoom();
       }
@@ -1381,6 +1517,12 @@ async function startRound() {
     return;
   }
 
+  if (roomCanBeClaimed(state.room, nowServer())) {
+    showToast("This room expired from inactivity. Create a new room.");
+    await leaveRoom();
+    return;
+  }
+
   els.startGameButton.disabled =
     true;
 
@@ -1402,9 +1544,12 @@ async function startRound() {
         nowServer() +
         3200,
 
+      lastActivityAt:
+        nowServer(),
+
       expiresAt:
         nowServer() +
-        ROOM_TTL_MS,
+        ROOM_INACTIVE_MS,
 
       board,
 
@@ -1508,6 +1653,12 @@ async function rematch() {
     return;
   }
 
+  if (roomCanBeClaimed(state.room, nowServer())) {
+    showToast("This room is no longer active. Create a new room.");
+    await leaveRoom();
+    return;
+  }
+
   els.rematchButton.disabled =
     true;
 
@@ -1519,9 +1670,12 @@ async function rematch() {
         nowServer() +
         3200,
 
+      lastActivityAt:
+        nowServer(),
+
       expiresAt:
         nowServer() +
-        ROOM_TTL_MS,
+        ROOM_INACTIVE_MS,
 
       board:
         generateBoard(),
@@ -1614,7 +1768,7 @@ function renderBoard(board) {
 // 0.15 = recommended
 // 0.20 = more precise
 // 0.25 = very strict
-const TILE_HITBOX_INSET = 0.19;
+const TILE_HITBOX_INSET = 0.22;
 
 function pointerIndex(event) {
   const x = event.clientX;
@@ -2407,6 +2561,8 @@ async function copyInvite() {
 }
 
 async function cleanupRoomListeners() {
+  stopRoomExpiryWatcher();
+
   if (
     state.roomUnsubscribe
   ) {

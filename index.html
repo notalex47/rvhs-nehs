@@ -36,7 +36,7 @@
           <p>Trace adjacent letters in any direction. Play alone for practice or race friends on the same board and clock.</p>
           <div class="hero-points">
             <span>4×4 generated boards</span>
-            <span>1-digit multiplayer rooms</span>
+            <span>36 single-character rooms</span>
             <span>264k-word dictionary</span>
           </div>
         </div>
@@ -56,10 +56,10 @@
           </button>
 
           <div class="join-row compact-join">
-            <input id="roomCodeInput" class="code-input" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" spellcheck="false" placeholder="0" aria-label="One-digit room code" />
+            <input id="roomCodeInput" class="code-input" maxlength="1" inputmode="text" pattern="[A-Za-z0-9]" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="A" aria-label="One-character room code: letter or number" />
             <button class="secondary-button" id="joinRoomButton" type="button">Join</button>
           </div>
-          <p class="microcopy">Practice never connects to Firebase. Multiplayer uses one room digit from 0–9 and anonymous Firebase sign-in.</p>
+          <p class="microcopy">Practice never connects to Firebase. Multiplayer uses one room character from 0–9 or A–Z and anonymous Firebase sign-in.</p>
         </div>
       </div>
     </section>

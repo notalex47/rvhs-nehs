@@ -3,7 +3,7 @@
 WordGrid Live is a 4×4 adjacent-letter word game with two modes:
 
 - **Practice:** one player, entirely browser-side. It does **not** initialize or connect to Firebase.
-- **Multiplayer:** up to **10 simultaneous room slots**, identified by the single digits **0–9**. Firebase Realtime Database synchronizes the board, timer, players, and scores.
+- **Multiplayer:** up to **36 simultaneous room slots**, identified by a single character: **0–9 or A–Z**. Firebase Realtime Database synchronizes the board, timer, players, and scores.
 
 The frontend is plain HTML/CSS/JavaScript, so there is no build step and it can be hosted on GitHub Pages.
 
@@ -13,16 +13,17 @@ This is an independent implementation of the adjacent-letter word-grid genre. It
 
 ## What changed in this version
 
-- Room codes are now exactly **one digit: 0 through 9**.
-- The app will never create more than 10 room keys.
+- Room codes are exactly **one character: 0–9 or A–Z**.
+- The app uses a fixed pool of 36 one-character room keys.
 - Room creation uses an atomic Firebase transaction, so two hosts cannot claim the same digit at the same time.
 - A finished room is recyclable after 5 minutes.
-- A room has a 30-minute lease. Starting/rematching refreshes the lease. This prevents an abandoned browser tab from permanently consuming one of the ten codes.
-- If a host deliberately presses **Leave room**, that room is deleted immediately and its digit becomes available again.
+- Stale room records are deleted on a best-effort basis whenever a user creates or joins multiplayer. This cleanup can also remove expired legacy multi-digit rooms from older versions.
+- A room becomes inactive after **10 minutes without meaningful room activity**. Starting, rematching, joins, and scoring activity observed by the host refresh the inactivity deadline.
+- If a host deliberately presses **Leave room**, that room is deleted immediately and its code becomes available again.
 - New **Practice solo** mode runs without Firebase. Firebase libraries are lazy-loaded only when a user chooses Create or Join.
-- A room has a session ID internally, so if a digit is eventually recycled, players from the old room are not silently dropped into the new game.
+- A room has a session ID internally, so if a code is recycled, players from the old room are not silently dropped into the new game.
 
-For a school site that normally has only 3–4 rooms at once, ten single-digit room slots should be plenty.
+For a school site that normally has only a few rooms at once, 36 single-character room slots provide substantial headroom.
 
 ---
 
@@ -44,15 +45,16 @@ wordgrid-live/
 ├── game-core.js
 ├── firebase-config.js
 ├── database.rules.json
+├── wordlist.txt
 ├── favicon.svg
 ├── .nojekyll
 ├── LICENSE
 ├── tests.mjs
-└── tools/
-    └── download-wordlist.py
+├── PACKAGE-NOTES.txt
+└── README.md
 ```
 
-You may also add `wordlist.txt` later; I recommend doing so.
+`wordlist.txt` is already bundled in this package and should stay beside `index.html`.
 
 ### 2. Decide whether this will be its own repository or a subfolder
 
@@ -320,13 +322,15 @@ This step is important. Do not leave the database publicly writable.
 5. Replace the rules currently shown in Firebase with those contents.
 6. Click **Publish**.
 
+**You must publish this updated rules file before using A–Z room codes.** The older numeric-only rules will reject letter room codes and will not permit the new stale-room cleanup.
+
 The supplied rules do several useful things:
 
 - require Firebase authentication;
-- only allow one-character numeric room keys (`0`–`9`);
+- only allow one-character alphanumeric room keys (`0`–`9`, `A`–`Z`) for new rooms;
 - let a host create/control its room;
 - let a player write only to that player's own player/word path;
-- permit an expired/old room digit to be safely claimed by a new host;
+- permit expired room records to be safely reclaimed or deleted, including stale legacy rooms from older versions;
 - validate basic data structure and scoring fields.
 
 This is still a casual-game security model. A technically sophisticated student who deliberately modifies browser JavaScript can falsify their own score; preventing that requires trusted server-side validation.
@@ -388,7 +392,7 @@ Do this only after Practice works and Firebase is configured.
 1. Open your GitHub Pages site normally.
 2. Enter a name such as `Alex`.
 3. Click **Create a room**.
-4. You should receive one digit, for example `4`.
+4. You should receive one character, for example `4` or `K`.
 5. Open the site in either:
    - an incognito/private window;
    - a different browser; or
@@ -405,39 +409,42 @@ Using two ordinary tabs in the exact same browser profile may share the same ano
 
 ---
 
-# How the one-digit room system works
+# How the one-character room system works
 
-There are only ten possible room paths:
+There are 36 possible room paths:
 
 ```text
 rooms/0
 rooms/1
-rooms/2
 ...
 rooms/9
+rooms/A
+rooms/B
+...
+rooms/Z
 ```
 
 When a host clicks **Create a room**:
 
-1. The browser randomizes which digit to try first.
-2. It uses a Firebase transaction to attempt to claim that digit.
-3. If another active room already occupies it, the transaction is rejected and the app tries another digit.
-4. It continues through all ten digits.
-5. If all ten are occupied, the app displays:
+1. The browser randomizes which one-character code to try first.
+2. It uses a Firebase transaction to attempt to claim that code.
+3. If another active room already occupies it, the transaction is rejected and the app tries another code.
+4. It continues through all 36 codes.
+5. If all 36 are occupied, the app displays:
 
 ```text
-All 10 rooms (0–9) are in use.
+All 36 room codes (0–9, A–Z) are in use.
 ```
 
 A room becomes reusable when:
 
 - the host deliberately leaves, which deletes the room immediately;
 - the finished-round grace period has passed; or
-- its 30-minute lease expires.
+- it has had no meaningful activity for 10 minutes.
 
-Starting a round or a rematch refreshes the lease.
+Starting/rematching refreshes the inactivity deadline. Joins and scoring activity also refresh it while the host is connected.
 
-The 30-minute lease is deliberately much longer than a 60–120 second game but short enough that abandoned school-browser tabs should not consume codes forever.
+The 10-minute inactivity window is much longer than a 60–120 second round, but short enough that abandoned rooms become reusable quickly. Stale records are also cleaned opportunistically whenever someone creates or joins a multiplayer room.
 
 ---
 
@@ -526,7 +533,7 @@ Firebase's Spark plan currently lists Realtime Database allowances of:
 - 1 GB stored;
 - 10 GB downloaded per month.
 
-Your game itself also limits room keys to ten. At the usage you described—normally only a few simultaneous school games—Firebase traffic should be very small relative to those limits.
+Your game limits room keys to 36. At the usage you described—normally only a few simultaneous school games—Firebase traffic should be very small relative to those limits.
 
 On Spark, Firebase caps service instead of billing you for overage; do not upgrade to Blaze unless you intentionally want pay-as-you-go behavior.
 
@@ -588,14 +595,14 @@ Usually one of these is wrong:
 3. `databaseURL` in `firebase-config.js` is not the URL of this exact Realtime Database.
 4. You edited the security rules but forgot to click **Publish**.
 
-## Room creation says all ten rooms are in use
+## Room creation says all 36 rooms are in use
 
 For normal school usage this should be rare. Possible causes:
 
-- ten rooms really are occupied;
-- several hosts closed browser tabs without pressing Leave, so their 30-minute room leases have not expired yet.
+- all 36 room codes really are occupied;
+- several rooms have not yet reached the 10-minute inactivity threshold.
 
-You can inspect the ten room keys in Firebase Realtime Database's **Data** tab. For emergency cleanup, you can manually delete stale room entries there.
+You can inspect the room keys in Firebase Realtime Database's **Data** tab. The app now performs best-effort cleanup of stale records whenever multiplayer is opened; you can still manually delete entries for emergency cleanup.
 
 ## Two test players appear as one player
 
@@ -603,7 +610,7 @@ Use a private/incognito window, another browser, or another device. Two normal t
 
 ## Players see different boards
 
-That means they are not actually in the same Firebase room/session. Verify both displays show the same one-digit code and that both names appear in the same lobby before starting.
+That means they are not actually in the same Firebase room/session. Verify both displays show the same one-character code and that both names appear in the same lobby before starting.
 
 ---
 
@@ -621,7 +628,7 @@ Expected output:
 All WordGrid core tests passed.
 ```
 
-The tests cover adjacency, diagonal tracing, row-wrap rejection, no tile reuse, scoring, one-digit room-code handling, and randomized board generation.
+The tests cover adjacency, diagonal tracing, row-wrap rejection, no tile reuse, scoring, one-character alphanumeric room-code handling, and randomized board generation.
 
 ---
 
@@ -654,8 +661,8 @@ Before calling the site finished, verify every box:
 - [ ] `database.rules.json` copied to Realtime Database Rules and published.
 - [ ] `firebase-config.js` replaced with your real config, including the correct `databaseURL`.
 - [ ] Updated `firebase-config.js` committed to GitHub.
-- [ ] Create Room returns one digit from 0–9.
-- [ ] A second browser/incognito window can join using that digit.
+- [ ] Create Room returns one character from 0–9 or A–Z.
+- [ ] A second browser/incognito window can join using that character.
 - [ ] Both players receive the same board/countdown.
 - [ ] Scores update on both devices.
 - [ ] Host leaving closes/frees the room.

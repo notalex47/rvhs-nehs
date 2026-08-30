@@ -24,10 +24,18 @@ assert.equal(scoreWord("eightaaa"), 2200);
 assert.equal(scoreWord("ninechars"), 2600);
 
 assert.equal(sanitizeRoomCode(" 7 "), "7");
-assert.equal(sanitizeRoomCode("room 42"), "4");
-assert.equal(sanitizeRoomCode("abc"), "");
+assert.equal(sanitizeRoomCode("room 42"), "R");
+assert.equal(sanitizeRoomCode(" z "), "Z");
+assert.equal(sanitizeRoomCode("@ b !"), "B");
 assert.equal(makeRoomCode(() => 0), "0");
-assert.equal(makeRoomCode(() => 0.999999), "9");
+assert.equal(makeRoomCode(() => 10 / 36), "A");
+assert.equal(makeRoomCode(() => 0.999999), "Z");
+
+const allRoomCodes = new Set(
+  Array.from({ length: 36 }, (_, i) => makeRoomCode(() => (i + 0.01) / 36))
+);
+assert.equal(allRoomCodes.size, 36, "room generator should cover 0-9 and A-Z");
+assert.ok([...allRoomCodes].every(code => /^[A-Z0-9]$/.test(code)));
 
 for (let i = 0; i < 12; i++) {
   const generated = generateBoard({ candidates: 4 });

@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no" />
+  <meta name="theme-color" content="#0b1020" />
+  <meta name="description" content="WordGrid Live — a fast multiplayer and solo word-grid game." />
+  <title>WordGrid Live</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="ambient ambient-a"></div>
+  <div class="ambient ambient-b"></div>
+
+  <main class="app-shell">
+    <header class="site-header">
+      <button class="brand" id="homeButton" type="button" aria-label="Go home">
+        <span class="brand-mark">W</span>
+        <span>
+          <strong>WORDGRID</strong>
+          <small>LIVE</small>
+        </span>
+      </button>
+      <div class="header-right">
+        <span class="status-pill" id="dictionaryStatus"><span class="dot"></span>Dictionary loading</span>
+        <button class="icon-button" id="helpButton" type="button" aria-label="How to play">?</button>
+      </div>
+    </header>
+
+    <section class="screen active" id="homeScreen" aria-labelledby="homeTitle">
+      <div class="home-grid">
+        <div class="hero-copy">
+          <span class="eyebrow">WORD HUNT, TOGETHER</span>
+          <h1 id="homeTitle">Find more words.<br><span>Beat the room.</span></h1>
+          <p>Trace adjacent letters in any direction. Play alone for practice or race friends on the same board and clock.</p>
+          <div class="hero-points">
+            <span>4×4 generated boards</span>
+            <span>1-digit multiplayer rooms</span>
+            <span>264k-word dictionary</span>
+          </div>
+        </div>
+
+        <div class="glass-card entry-card">
+          <label for="playerName">YOUR NAME</label>
+          <input id="playerName" maxlength="18" autocomplete="nickname" placeholder="Player" />
+
+          <button class="practice-button" id="practiceButton" type="button">
+            <span>Practice solo</span><b>LOCAL</b>
+          </button>
+
+          <div class="divider"><span>MULTIPLAYER</span></div>
+
+          <button class="primary-button" id="createRoomButton" type="button">
+            <span>Create a room</span><b>→</b>
+          </button>
+
+          <div class="join-row compact-join">
+            <input id="roomCodeInput" class="code-input" maxlength="1" inputmode="numeric" pattern="[0-9]" autocomplete="off" spellcheck="false" placeholder="0" aria-label="One-digit room code" />
+            <button class="secondary-button" id="joinRoomButton" type="button">Join</button>
+          </div>
+          <p class="microcopy">Practice never connects to Firebase. Multiplayer uses one room digit from 0–9 and anonymous Firebase sign-in.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="screen" id="roomScreen" aria-labelledby="roomHeading">
+      <div class="room-topbar">
+        <div>
+          <span class="eyebrow" id="phaseLabel">ROOM</span>
+          <div class="room-code-line">
+            <h2 id="roomHeading">0</h2>
+            <button class="copy-button" id="copyRoomButton" type="button">Copy invite</button>
+          </div>
+        </div>
+        <div class="timer-card" id="timerCard">
+          <span>TIME</span>
+          <strong id="timerText">1:30</strong>
+        </div>
+      </div>
+
+      <div class="lobby-panel" id="lobbyPanel">
+        <div class="lobby-main glass-card">
+          <span class="eyebrow">LOBBY</span>
+          <h2 id="lobbyTitle">Ready when everyone is in.</h2>
+          <p id="lobbyDescription">Share the room code or invite link. The board appears for everyone when the host starts.</p>
+          <div class="player-chip-list" id="lobbyPlayers"></div>
+
+          <div class="host-controls" id="hostControls">
+            <label for="durationSelect">ROUND LENGTH</label>
+            <select id="durationSelect">
+              <option value="60000">60 seconds</option>
+              <option value="90000" selected>90 seconds</option>
+              <option value="120000">120 seconds</option>
+            </select>
+            <button class="primary-button" id="startGameButton" type="button">Start round <b>→</b></button>
+          </div>
+          <p class="waiting-copy" id="waitingCopy">Waiting for the host to start…</p>
+        </div>
+
+        <aside class="glass-card lobby-side">
+          <span class="eyebrow">HOW IT WORKS</span>
+          <ol>
+            <li>Drag across touching letters.</li>
+            <li>Use each tile only once per word.</li>
+            <li>Words must be at least 3 letters.</li>
+            <li>Longer words score much more.</li>
+          </ol>
+        </aside>
+      </div>
+
+      <div class="game-layout hidden" id="gamePanel">
+        <section class="game-column">
+          <div class="word-feedback" aria-live="polite">
+            <span id="wordHint">DRAG TO MAKE A WORD</span>
+            <strong id="currentWord">&nbsp;</strong>
+          </div>
+
+          <div class="board-wrap" id="boardWrap">
+            <svg class="trace-layer" id="traceLayer" aria-hidden="true">
+              <polyline id="traceLine" points="" />
+            </svg>
+            <div class="board" id="board" aria-label="Letter grid"></div>
+            <div class="countdown-overlay hidden" id="countdownOverlay"><strong id="countdownNumber">3</strong></div>
+          </div>
+
+          <div class="game-actions">
+            <div class="my-score">
+              <span>YOUR SCORE</span>
+              <strong id="myScore">0</strong>
+            </div>
+            <div class="last-word" id="lastWord">Find a word to start scoring.</div>
+          </div>
+        </section>
+
+        <aside class="glass-card leaderboard-card">
+          <div class="leaderboard-heading">
+            <div><span class="eyebrow" id="leaderboardEyebrow">LIVE</span><h3 id="leaderboardTitle">Leaderboard</h3></div>
+            <span id="playerCount">0 players</span>
+          </div>
+          <div class="leaderboard" id="leaderboard"></div>
+          <div class="word-log-wrap">
+            <span class="eyebrow">YOUR WORDS</span>
+            <div class="word-log" id="wordLog"></div>
+          </div>
+        </aside>
+      </div>
+
+      <div class="results-panel hidden" id="resultsPanel">
+        <div class="results-card glass-card">
+          <span class="eyebrow">ROUND COMPLETE</span>
+          <h2 id="winnerHeading">Results</h2>
+          <div class="podium" id="resultsList"></div>
+          <div class="result-actions">
+            <button class="primary-button hidden" id="rematchButton" type="button">New board <b>↻</b></button>
+            <button class="secondary-button" id="leaveRoomButton" type="button">Leave room</button>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <dialog id="helpDialog">
+    <button class="dialog-close" id="closeHelpButton" type="button" aria-label="Close">×</button>
+    <span class="eyebrow">HOW TO PLAY</span>
+    <h2>Trace fast. Think sideways.</h2>
+    <p>Press or touch a letter, then drag through horizontally, vertically, or diagonally adjacent tiles. A tile cannot be reused in the same word.</p>
+    <div class="rules-grid">
+      <div><strong>3 letters</strong><span>100 pts</span></div>
+      <div><strong>4 letters</strong><span>300 pts</span></div>
+      <div><strong>5 letters</strong><span>600 pts</span></div>
+      <div><strong>6 letters</strong><span>1,000 pts</span></div>
+      <div><strong>7 letters</strong><span>1,500 pts</span></div>
+      <div><strong>8+ letters</strong><span>2,200+ pts</span></div>
+    </div>
+    <p class="microcopy">Practice mode is browser-only. Multiplayer uses Firebase only after you create or join a room.</p>
+    <p class="microcopy">WordGrid Live is an independent word-grid game. It does not use GamePigeon branding, artwork, code, or proprietary assets.</p>
+  </dialog>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

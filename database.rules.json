@@ -1,0 +1,27 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "rooms": {
+      "$room": {
+        ".read": "auth != null",
+        ".write": "auth != null && ((!data.exists() && newData.exists() && newData.child('hostUid').val() === auth.uid) || (data.exists() && data.child('hostUid').val() === auth.uid) || (data.exists() && newData.exists() && newData.child('hostUid').val() === auth.uid && ((data.child('expiresAt').isNumber() && data.child('expiresAt').val() <= now) || data.child('status').val() === 'closed' || (data.child('status').val() === 'finished' && data.child('finishedAt').isNumber() && data.child('finishedAt').val() + 300000 <= now))))",
+        ".validate": "$room.matches(/^[0-9]$/) && newData.hasChildren(['hostUid','sessionId','createdAt','expiresAt','status','gameId','durationMs','startAt','players']) && newData.child('hostUid').isString() && newData.child('sessionId').isString() && newData.child('createdAt').isNumber() && newData.child('expiresAt').isNumber() && newData.child('gameId').isNumber() && newData.child('durationMs').isNumber() && newData.child('durationMs').val() >= 60000 && newData.child('durationMs').val() <= 120000 && newData.child('startAt').isNumber() && (newData.child('status').val() === 'lobby' || newData.child('status').val() === 'playing' || newData.child('status').val() === 'finished' || newData.child('status').val() === 'closed')",
+        "players": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid",
+            ".validate": "newData.hasChildren(['name','score','wordCount']) && newData.child('name').isString() && newData.child('name').val().length <= 18 && newData.child('score').isNumber() && newData.child('score').val() >= 0 && newData.child('wordCount').isNumber() && newData.child('wordCount').val() >= 0"
+          }
+        },
+        "accepted": {
+          "$uid": {
+            "$word": {
+              ".write": "auth != null && auth.uid === $uid && !data.exists() && newData.exists()",
+              ".validate": "$word.matches(/^[a-z]{3,16}$/) && newData.hasChildren(['points','at','gameId']) && newData.child('points').isNumber() && newData.child('points').val() >= 0"
+            }
+          }
+        }
+      }
+    }
+  }
+}

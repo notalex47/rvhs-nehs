@@ -3,11 +3,20 @@
 // This configuration is intended to be public in a browser app; your Database
 // Security Rules are what protect your data.
 export const firebaseConfig = {
-  apiKey: "PASTE_YOUR_API_KEY",
-  authDomain: "PASTE_YOUR_PROJECT_ID.firebaseapp.com",
-  databaseURL: "https://PASTE_YOUR_DATABASE_NAME-default-rtdb.firebaseio.com",
-  projectId: "PASTE_YOUR_PROJECT_ID",
-  storageBucket: "PASTE_YOUR_PROJECT_ID.firebasestorage.app",
-  messagingSenderId: "PASTE_YOUR_SENDER_ID",
-  appId: "PASTE_YOUR_APP_ID"
+
+  apiKey: "AIzaSyDa7FWk8BhcBFggHB5TmrR1Hx30DzeGA8M",
+
+  authDomain: "rvhs-nehs.firebaseapp.com",
+  databaseURL: "https://rvhs-nehs-default-rtdb.firebaseio.com",
+  projectId: "rvhs-nehs",
+
+  storageBucket: "rvhs-nehs.firebasestorage.app",
+
+  messagingSenderId: "222712402687",
+
+  appId: "1:222712402687:web:d85c164b2e7fecfd6632ca",
+
+  measurementId: "G-5BGYC4Z5Q4"
+
 };
+
